@@ -161,6 +161,14 @@
 
     let scanner = null;
     let isFocusMode = false;
+    // Add Html5QrcodeScannerState to global scope for state checking
+    const Html5QrcodeScannerState = {
+      UNKNOWN: 0,
+      NOT_STARTED: 1,
+      SCANNING: 2,
+      PAUSED: 3
+    };
+
     let debugMessages = [];
 
     // Debug logging function
@@ -276,8 +284,18 @@
       try {
         addDebugMessage('Initializing Html5Qrcode scanner...');
         
-        // Create scanner instance
-        scanner = new Html5Qrcode("video");
+        // Create scanner instance with a container div instead of video element
+        const scannerElement = document.createElement('div');
+        scannerElement.id = 'qr-reader';
+        scannerElement.style.width = '100%';
+        scannerElement.style.maxWidth = '500px';
+        
+        // Replace the video element with our scanner container
+        const cameraFeed = document.getElementById('camera-feed');
+        cameraFeed.innerHTML = '';
+        cameraFeed.appendChild(scannerElement);
+        
+        scanner = new Html5Qrcode("qr-reader");
         addDebugMessage('Scanner instance created', 'success');
         
         // Get available cameras
@@ -292,15 +310,19 @@
           throw new Error('No cameras detected on this device');
         }
         
-        // Configuration optimized for reliability
+        // Simplified configuration that works more reliably
         const config = {
           fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-          disableFlip: false,
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true
-          }
+          qrbox: function(viewfinderWidth, viewfinderHeight) {
+            let minEdgePercentage = 0.7;
+            let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+            let qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
+            return {
+              width: qrboxSize,
+              height: qrboxSize
+            };
+          },
+          aspectRatio: 1.0
         };
         
         // Camera selection logic
@@ -330,22 +352,53 @@
         
         addDebugMessage('Scanner started successfully', 'success');
         
-        // Verify video is actually playing
-        await verifyVideoPlayback();
+        // Wait a moment for the video to initialize, then check
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        statusEl.textContent = 'Scanner ready - Point at QR code';
-        cameraOverlay.style.display = 'block';
-        addDebugMessage('Scanner is now ready for use', 'success');
+        // Check if scanner is actually running
+        if (scanner.getState() === Html5QrcodeScannerState.SCANNING) {
+          addDebugMessage('Scanner is actively scanning', 'success');
+          statusEl.textContent = 'Scanner ready - Point at QR code';
+          
+          // Re-add the overlay to the new container
+          const overlay = document.createElement('div');
+          overlay.id = 'camera-overlay';
+          overlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            pointer-events: none;
+          `;
+          overlay.innerHTML = `<div style="
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 250px;
+            height: 250px;
+            transform: translate(-50%, -50%);
+            border: 2px solid #ff0000;
+            border-radius: 10px;
+          "></div>`;
+          
+          scannerElement.style.position = 'relative';
+          scannerElement.appendChild(overlay);
+          
+          addDebugMessage('Scanner is now ready for use', 'success');
+        } else {
+          throw new Error('Scanner failed to enter scanning state');
+        }
         
       } catch (err) {
         addDebugMessage(`Scanner initialization failed: ${err.message}`, 'error');
         statusEl.textContent = `Error: ${err.message}`;
         
         // Try fallback approach
-        if (err.message.includes('Permission') || err.message.includes('NotAllowedError')) {
-          addDebugMessage('Trying fallback scanner with environment facing mode', 'warning');
-          await tryFallbackScanner();
-        }
+        addDebugMessage('Trying fallback scanner approach', 'warning');
+        await tryFallbackScanner();
       }
     }
 
@@ -382,21 +435,97 @@
     }
 
     async function tryFallbackScanner() {
-      statusEl.textContent = 'Trying alternative camera...';
       try {
         addDebugMessage('Attempting fallback scanner with facingMode constraint');
+        
+        // Create a fresh scanner container
+        const scannerElement = document.createElement('div');
+        scannerElement.id = 'qr-reader-fallback';
+        scannerElement.style.width = '100%';
+        scannerElement.style.maxWidth = '500px';
+        
+        const cameraFeed = document.getElementById('camera-feed');
+        cameraFeed.innerHTML = '';
+        cameraFeed.appendChild(scannerElement);
+        
+        // Stop existing scanner if running
+        if (scanner) {
+          try {
+            await scanner.stop();
+          } catch (e) {
+            addDebugMessage('Error stopping previous scanner (expected)', 'warning');
+          }
+        }
+        
+        scanner = new Html5Qrcode("qr-reader-fallback");
+        
+        // Use constraint-based approach
         await scanner.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: 250 },
+          {
+            fps: 10,
+            qrbox: function(viewfinderWidth, viewfinderHeight) {
+              let minEdgePercentage = 0.7;
+              let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+              let qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
+              return {
+                width: qrboxSize,
+                height: qrboxSize
+              };
+            }
+          },
           onScanSuccess,
           onScanError
         );
-        statusEl.textContent = 'Scanner ready (fallback mode)';
-        cameraOverlay.style.display = 'block';
-        addDebugMessage('Fallback scanner started successfully', 'success');
+        
+        // Wait for initialization
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        if (scanner.getState() === Html5QrcodeScannerState.SCANNING) {
+          statusEl.textContent = 'Scanner ready (fallback mode)';
+          addDebugMessage('Fallback scanner started successfully', 'success');
+          
+          // Add overlay
+          const overlay = document.createElement('div');
+          overlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            pointer-events: none;
+          `;
+          overlay.innerHTML = `<div style="
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 200px;
+            height: 200px;
+            transform: translate(-50%, -50%);
+            border: 2px solid #ff0000;
+            border-radius: 10px;
+          "></div>`;
+          
+          scannerElement.style.position = 'relative';
+          scannerElement.appendChild(overlay);
+        } else {
+          throw new Error('Fallback scanner failed to start');
+        }
+        
       } catch (fallbackErr) {
         addDebugMessage(`Fallback scanner failed: ${fallbackErr.message}`, 'error');
-        statusEl.textContent = 'Failed to start camera. Please try another device.';
+        statusEl.innerHTML = `
+          <div>Camera initialization failed</div>
+          <div>Please try:</div>
+          <ul>
+            <li>Refreshing the page</li>
+            <li>Allowing camera permissions</li>
+            <li>Using HTTPS connection</li>
+            <li>Trying a different browser</li>
+          </ul>
+        `;
       }
     }
 
@@ -452,13 +581,17 @@
       } finally {
         statusEl.textContent = 'Ready to scan';
         // Restart scanner after a brief pause
-        if (scanner) {
-          setTimeout(() => {
-            scanner.stop().then(() => {
+        if (scanner && scanner.getState() === Html5QrcodeScannerState.SCANNING) {
+          setTimeout(async () => {
+            try {
+              await scanner.stop();
+              addDebugMessage('Scanner stopped for restart');
               setTimeout(initializeScanner, 1000);
-            }).catch(err => {
+            } catch (err) {
               addDebugMessage(`Error restarting scanner: ${err.message}`, 'error');
-            });
+              // Try to reinitialize anyway
+              setTimeout(initializeScanner, 2000);
+            }
           }, 2000);
         }
       }
