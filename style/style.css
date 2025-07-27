@@ -8,135 +8,47 @@ body {
   padding: 20px;
   margin: 0;
   min-height: 100vh;
-}
-
-.login-container {
-  margin-top: 10%;
-  background: white;
-  color: #001f3f;
-  padding: 20px;
-  border-radius: 10px;
-  width: 300px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-}
-
-input {
-  width: 100%;
-  padding: 10px;
-  margin: 8px 0;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-
-button {
-  background-color: #001f3f;
-  color: white;
-  border: none;
-  padding: 12px;
-  width: 100%;
-  cursor: pointer;
-  border-radius: 4px;
-  font-size: 16px;
-  margin-top: 10px;
-}
-
-button:hover {
-  background-color: #003366;
-}
-
-#error {
-  color: red;
-  margin-top: 10px;
-  min-height: 20px;
-}
-
-#video {
-  width: 100%;
-  max-width: 400px;
-  margin: 20px 0;
-  background-color: black;
-  border-radius: 10px;
-  aspect-ratio: 1;
-  object-fit: cover;
-}
-
-#result {
-  margin: 20px 0;
-  font-size: 1.2em;
-  text-align: center;
-  min-height: 24px;
-}
-
-#guest-name {
-  font-weight: bold;
-  color: #ffcc00;
-}
-
-#scanner-status {
-  padding: 10px;
-  margin-bottom: 10px;
-  background: #333;
-  color: white;
-  border-radius: 4px;
-  text-align: center;
-  width: 100%;
-  max-width: 400px;
-}
-
-body {
-  background-color: #001f3f;
-  color: white;
-  font-family: 'Segoe UI', sans-serif;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px;
-  margin: 0;
-  min-height: 100vh;
   text-align: center;
 }
 
-#video {
+#camera-feed {
+  position: relative;
   width: 90vw;
   max-width: 400px;
   height: 90vw;
   max-height: 400px;
-  background-color: black;
-  border: 2px solid #00ff00;
+  margin: 20px 0;
   border-radius: 10px;
-  margin: 10px 0;
+  overflow: hidden;
+}
+
+#video {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  background-color: black;
+}
+
+#camera-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  border: 3px solid #00ff00;
+  box-sizing: border-box;
+  display: none;
 }
 
 #scanner-status {
   padding: 10px;
-  background: #333;
+  background: rgba(0,0,0,0.7);
   color: white;
   border-radius: 5px;
   margin: 10px 0;
   width: 90%;
   max-width: 400px;
-}
-
-#permission-request {
-  background: #333;
-  padding: 20px;
-  border-radius: 10px;
-  margin: 20px 0;
-  width: 90%;
-  max-width: 400px;
-}
-
-#permission-request button {
-  background: #4CAF50;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 5px;
-  font-size: 16px;
-  margin-top: 10px;
-  cursor: pointer;
 }
 
 #result {
@@ -145,20 +57,27 @@ body {
   min-height: 1.5em;
 }
 
-#guest-name {
-  font-weight: bold;
-  color: #ffcc00;
-  font-size: 1.3em;
+button {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 16px;
+  margin: 10px 0;
+  cursor: pointer;
 }
 
-/* Mobile specific styles */
-@media screen and (max-width: 600px) {
-  #video {
-    width: 90vw;
-    height: 90vw;
-  }
-  
-  .login-container {
-    width: 90vw;
-  }
+button:hover {
+  background-color: #45a049;
+}
+
+/* Focus mode styling */
+.focus-mode #camera-overlay {
+  background: rgba(0,0,0,0.7);
+}
+
+.focus-mode #video {
+  transform: scale(1.1);
+  transition: transform 0.3s;
 }
