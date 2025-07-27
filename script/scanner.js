@@ -1,11 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { 
-  getDatabase, 
-  ref, 
-  get, 
-  update, 
-  set 
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, get, update, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCefQpH77HPNPkO6buwL7rCI2oVBL77B8c",
@@ -21,107 +15,148 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+// DOM Elements
 const videoElement = document.getElementById('video');
 const resultEl = document.getElementById('result');
 const nameEl = document.getElementById('guest-name');
 const statusEl = document.getElementById('scanner-status');
-const debugBtn = document.getElementById('debug-btn');
+const permissionRequest = document.getElementById('permission-request');
+const requestAccessBtn = document.getElementById('request-access');
 
-let activeScanner = null;
+let scanner = null;
 
-// Enable debug button
-debugBtn.style.display = 'block';
-debugBtn.addEventListener('click', debugCameras);
+// Main initialization
+document.addEventListener('DOMContentLoaded', async () => {
+  // First verify we can access camera
+  if (!await verifyCameraAccess()) {
+    showPermissionRequest();
+    return;
+  }
+  
+  // Then initialize Firebase and scanner
+  initializeScanner();
+});
 
-// iOS specific fixes
-if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-  enableInlineVideo(videoElement);
+async function verifyCameraAccess() {
+  try {
+    // Test basic camera access
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Camera API not supported');
+    }
+    
+    // Special handling for iOS
+    if (isIOS()) {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(track => track.stop());
+      return true;
+    }
+    
+    // For other devices
+    const permission = await navigator.permissions.query({ name: 'camera' });
+    return permission.state === 'granted';
+  } catch (err) {
+    console.error('Camera access check failed:', err);
+    return false;
+  }
 }
 
-async function initScanner() {
-  try {
-    statusEl.textContent = 'Initializing scanner...';
-    
-    // Check mobile permissions
-    if (!await checkMobilePermissions()) return;
-
-    activeScanner = new Html5Qrcode("video", true);
-    const cameras = await Html5Qrcode.getCameras();
-    
-    if (cameras.length === 0) {
-      throw new Error('No cameras detected');
+function showPermissionRequest() {
+  permissionRequest.style.display = 'block';
+  statusEl.style.display = 'none';
+  
+  requestAccessBtn.addEventListener('click', async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(track => track.stop());
+      permissionRequest.style.display = 'none';
+      statusEl.style.display = 'block';
+      initializeScanner();
+    } catch (err) {
+      statusEl.textContent = 'Please enable camera in browser settings';
     }
+  });
+}
 
-    const cameraId = selectBestCamera(cameras);
-    console.log('Using camera:', cameras.find(c => c.id === cameraId)?.label);
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
 
-    await activeScanner.start(
+async function initializeScanner() {
+  statusEl.textContent = 'Starting camera...';
+  
+  try {
+    scanner = new Html5Qrcode("video");
+    
+    // Mobile-specific configuration
+    const config = {
+      fps: 10,
+      qrbox: 250,
+      aspectRatio: 1.0,
+      disableFlip: false
+    };
+    
+    // Camera selection logic
+    const cameras = await Html5Qrcode.getCameras();
+    if (cameras.length === 0) {
+      throw new Error('No cameras found');
+    }
+    
+    // Prefer rear camera on mobile
+    let cameraId = cameras[0].id;
+    if (isMobile()) {
+      const rearCamera = cameras.find(c => 
+        c.label.includes('back') || 
+        c.label.includes('rear') ||
+        c.label.includes('environment')
+      );
+      if (rearCamera) cameraId = rearCamera.id;
+    }
+    
+    await scanner.start(
       cameraId,
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
-        disableFlip: true
-      },
+      config,
       onScanSuccess,
       onScanError
     );
-
+    
     statusEl.textContent = 'Scanner ready';
     
+    // Verify video is actually playing
+    await waitForVideoPlayback();
+    
   } catch (err) {
-    console.error('Scanner init failed:', err);
+    console.error('Scanner init error:', err);
     statusEl.textContent = `Error: ${err.message}`;
     
-    if (err.message.includes('index is not in the allowed range')) {
+    // Fallback to environment facing mode
+    if (err.message.includes('index') || err.message.includes('range')) {
       tryFallbackScanner();
     }
   }
 }
 
-function selectBestCamera(cameras) {
-  // Mobile preference
-  if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
-    const rearCamera = cameras.find(cam => 
-      cam.label.includes('back') || 
-      cam.label.includes('rear') ||
-      cam.label.includes('environment')
-    );
-    return rearCamera?.id || cameras[0].id;
-  }
-  // Desktop preference
-  return cameras[0].id;
+function isMobile() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
-async function checkMobilePermissions() {
-  if (typeof DeviceOrientationEvent !== 'undefined' && 
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
-    try {
-      const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission !== 'granted') {
-        statusEl.textContent = 'Camera permission denied';
-        return false;
+async function waitForVideoPlayback() {
+  return new Promise((resolve) => {
+    const checkInterval = setInterval(() => {
+      if (videoElement.readyState > 0 && videoElement.videoWidth > 0) {
+        clearInterval(checkInterval);
+        resolve();
       }
-    } catch (err) {
-      console.error('Permission error:', err);
-      statusEl.textContent = 'Please enable camera access';
-      return false;
-    }
-  }
-  return true;
+    }, 100);
+  });
 }
 
 async function tryFallbackScanner() {
-  statusEl.textContent = 'Trying fallback method...';
+  statusEl.textContent = 'Trying alternative method...';
   try {
-    activeScanner = new Html5Qrcode("video");
-    await activeScanner.start(
+    await scanner.start(
       { facingMode: "environment" },
-      {
-        fps: 10,
-        qrbox: 250,
-        supportedScanTypes: [Html5Qrcode.ScanType.SCAN_TYPE_CAMERA]
-      },
+      { fps: 10, qrbox: 250 },
       onScanSuccess,
       onScanError
     );
@@ -133,18 +168,20 @@ async function tryFallbackScanner() {
 }
 
 function onScanSuccess(decodedText) {
+  statusEl.textContent = 'Processing QR code...';
   handleScan(decodedText);
 }
 
 function onScanError(error) {
-  if (!error.message.includes('NotAllowedError')) {
+  // Ignore common errors during normal operation
+  if (!error.message.includes('No multi format readers configured') &&
+      !error.message.includes('width is 0')) {
     console.log('Scan error:', error);
   }
 }
 
 async function handleScan(decodedText) {
   try {
-    statusEl.textContent = 'Processing QR code...';
     const uniqueId = decodedText.trim();
     const guestRef = ref(db, 'guests/' + uniqueId);
     const snapshot = await get(guestRef);
@@ -171,38 +208,15 @@ async function handleScan(decodedText) {
         scannedAt: new Date().toISOString()
       });
     }
-    statusEl.textContent = 'Scan complete. Ready for next scan.';
-    
   } catch (err) {
     console.error("Database Error:", err);
     resultEl.textContent = "Error processing scan";
-    statusEl.textContent = 'Ready to scan';
   } finally {
-    if (activeScanner) {
-      activeScanner.stop().then(() => {
-        setTimeout(initScanner, 1000);
+    statusEl.textContent = 'Ready to scan';
+    if (scanner) {
+      scanner.stop().then(() => {
+        setTimeout(initializeScanner, 1000);
       });
     }
   }
 }
-
-async function debugCameras() {
-  try {
-    const cameras = await Html5Qrcode.getCameras();
-    alert(`Available cameras:\n${
-      cameras.map((cam, i) => `${i}: ${cam.label}`).join('\n')
-    }`);
-    
-    console.log('Video element state:', {
-      readyState: videoElement.readyState,
-      width: videoElement.videoWidth,
-      height: videoElement.videoHeight,
-      playing: !videoElement.paused
-    });
-  } catch (err) {
-    alert('Camera debug failed: ' + err.message);
-  }
-}
-
-// Start scanner when page loads
-document.addEventListener('DOMContentLoaded', initScanner);

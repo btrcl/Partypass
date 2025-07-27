@@ -4,16 +4,21 @@
   <title>QR Scanner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link rel="stylesheet" href="style/style.css">
+  <!-- Add this for iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
 </head>
 <body>
-  <div id="scanner-status">Initializing scanner...</div>
+  <div id="scanner-status">Preparing scanner...</div>
+  <div id="permission-request" style="display:none;">
+    <h3>Camera Permission Required</h3>
+    <p>Please allow camera access to use the scanner</p>
+    <button id="request-access">Enable Camera</button>
+  </div>
   <h2>Farayola introduces <span id="guest-name">...</span></h2>
   <video id="video" autoplay playsinline></video>
   <p id="result"></p>
-  <button id="debug-btn" style="display:none;">Debug Cameras</button>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/iphone-inline-video@2.2.1/dist/iphone-inline-video.min.js"></script>
   <script type="module" src="script/scanner.js"></script>
 </body>
 </html>

@@ -84,6 +84,73 @@ button:hover {
   max-width: 400px;
 }
 
+body {
+  background-color: #001f3f;
+  color: white;
+  font-family: 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  margin: 0;
+  min-height: 100vh;
+  text-align: center;
+}
+
+#video {
+  width: 90vw;
+  max-width: 400px;
+  height: 90vw;
+  max-height: 400px;
+  background-color: black;
+  border: 2px solid #00ff00;
+  border-radius: 10px;
+  margin: 10px 0;
+  object-fit: cover;
+}
+
+#scanner-status {
+  padding: 10px;
+  background: #333;
+  color: white;
+  border-radius: 5px;
+  margin: 10px 0;
+  width: 90%;
+  max-width: 400px;
+}
+
+#permission-request {
+  background: #333;
+  padding: 20px;
+  border-radius: 10px;
+  margin: 20px 0;
+  width: 90%;
+  max-width: 400px;
+}
+
+#permission-request button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 16px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+#result {
+  margin: 15px 0;
+  font-size: 1.2em;
+  min-height: 1.5em;
+}
+
+#guest-name {
+  font-weight: bold;
+  color: #ffcc00;
+  font-size: 1.3em;
+}
+
 /* Mobile specific styles */
 @media screen and (max-width: 600px) {
   #video {
