@@ -17,13 +17,11 @@ const db = getDatabase(app);
 
 // DOM Elements
 const videoElement = document.getElementById('video');
-const resultEl = document.getElementById('result');
 const statusEl = document.getElementById('scanner-status');
-const focusBtn = document.getElementById('manual-focus');
 const cameraOverlay = document.getElementById('camera-overlay');
 
 let scanner = null;
-let isFocusMode = false;
+let isProcessing = false; // Prevent multiple scans
 
 // Main initialization
 document.addEventListener('DOMContentLoaded', async () => {
@@ -35,9 +33,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize scanner
   initializeScanner();
-  
-  // Set up focus toggle
-  focusBtn.addEventListener('click', toggleFocusMode);
 });
 
 async function verifyCameraAccess() {
@@ -163,12 +158,6 @@ async function verifyVideoPlayback() {
   });
 }
 
-function toggleFocusMode() {
-  isFocusMode = !isFocusMode;
-  focusBtn.textContent = isFocusMode ? 'Exit Focus Mode' : 'Toggle Focus Mode';
-  cameraOverlay.style.backgroundColor = isFocusMode ? 'rgba(0,0,0,0.7)' : 'transparent';
-}
-
 async function tryFallbackScanner() {
   statusEl.textContent = 'Trying alternative camera...';
   try {
@@ -186,6 +175,10 @@ async function tryFallbackScanner() {
 }
 
 function onScanSuccess(decodedText) {
+  // Prevent multiple scans
+  if (isProcessing) return;
+  
+  isProcessing = true;
   statusEl.textContent = 'Processing QR code...';
   handleScan(decodedText);
 }
@@ -203,15 +196,9 @@ async function handleScan(decodedText) {
     const uniqueId = decodedText.trim();
     console.log(`[${new Date().toLocaleTimeString()}] INFO: Scanned QR Code: ${uniqueId}`);
     
-    // Debug: Check if resultEl exists
-    console.log('Result element exists:', !!resultEl);
-    console.log('Result element:', resultEl);
-    
-    // Force update the display immediately
-    if (resultEl) {
-      resultEl.textContent = 'Processing...';
-      resultEl.style.display = 'block';
-      resultEl.style.visibility = 'visible';
+    // Stop scanner immediately to prevent multiple scans
+    if (scanner) {
+      await scanner.stop();
     }
     
     const guestRef = ref(db, 'guests/' + uniqueId);
@@ -220,16 +207,18 @@ async function handleScan(decodedText) {
     if (!snapshot.exists()) {
       console.log('Guest not found for ID:', uniqueId);
       const message = `Guest not found - ID: ${uniqueId}`;
-      if (resultEl) {
-        resultEl.innerHTML = `<div style="color: red; font-size: 16px; text-align: center; padding: 10px;">${message}</div>`;
-      }
-      // Also try to update status element as backup
-      statusEl.innerHTML = `<span style="color: red;">${message}</span>`;
+      statusEl.innerHTML = `<div style="color: red; font-size: 16px; text-align: center; padding: 10px;">${message}</div>`;
+      
+      // Restart scanner after delay
+      setTimeout(() => {
+        isProcessing = false;
+        initializeScanner();
+      }, 3000);
       return;
     }
 
     const data = snapshot.val();
-    console.log(`[${new Date().toLocaleTimeString()}] INFO: Extracted Name: ${data.name}, Firebase ID: ${uniqueId}`);
+    console.log(`[${new Date().toLocaleTimeString()}] INFO: Guest Info - Name: ${data.name}, Firebase ID: ${uniqueId}`);
     
     let displayMessage = '';
     
@@ -245,7 +234,7 @@ async function handleScan(decodedText) {
       await update(guestRef, { has_scanned: true });
       displayMessage = `
         <div style="color: green; font-size: 20px; text-align: center; padding: 10px;">
-          <div>Welcome ${data.name}! ✅</div>
+          <div>✅ ${data.name}</div>
           <div style="margin-top: 10px; font-size: 16px;">Guest ID: <strong>${uniqueId}</strong></div>
           <div style="margin-top: 5px; font-size: 12px; color: #666;">Scanned: ${new Date().toLocaleTimeString()}</div>
         </div>
@@ -259,31 +248,19 @@ async function handleScan(decodedText) {
       });
     }
     
-    // Update both result element and status as backup
-    if (resultEl) {
-      resultEl.innerHTML = displayMessage;
-    }
     statusEl.innerHTML = displayMessage;
-    
-    console.log('Display updated with:', displayMessage);
+    console.log('Guest info displayed:', displayMessage);
     
   } catch (err) {
     console.error("Database Error:", err);
     const errorMessage = `<div style="color: red; text-align: center; padding: 10px;">Error: ${err.message}<br>QR: ${decodedText}</div>`;
-    if (resultEl) {
-      resultEl.innerHTML = errorMessage;
-    }
     statusEl.innerHTML = errorMessage;
   } finally {
-    // Don't reset status immediately - let the message show
+    // Reset processing flag and restart scanner after delay
     setTimeout(() => {
+      isProcessing = false;
       statusEl.textContent = 'Ready to scan';
+      initializeScanner();
     }, 3000);
-    
-    if (scanner) {
-      scanner.stop().then(() => {
-        setTimeout(initializeScanner, 2000); // Give more time to see the result
-      });
-    }
   }
 }

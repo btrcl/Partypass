@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>QR Scanner - Debug Version</title>
+  <title>QR Scanner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,15 +13,13 @@
       background: #000;
       color: #fff;
     }
-    
-    #scanner-status {
+    #scanner-status, #result {
       text-align: center;
       padding: 10px;
       background: #333;
       border-radius: 5px;
       margin-bottom: 20px;
     }
-    
     #camera-feed {
       position: relative;
       width: 100%;
@@ -30,74 +28,12 @@
       display: flex;
       justify-content: center;
     }
-    
     #video {
       width: 100%;
       height: auto;
       border-radius: 10px;
     }
-    
-    #camera-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      border: 2px solid #00ff00;
-      border-radius: 10px;
-      pointer-events: none;
-      display: none;
-    }
-    
-    #camera-overlay::after {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 250px;
-      height: 250px;
-      transform: translate(-50%, -50%);
-      border: 2px solid #ff0000;
-      border-radius: 10px;
-    }
-    
-    #welcome-message {
-      text-align: center;
-      font-size: 28px;
-      font-weight: bold;
-      margin: 20px 0;
-      min-height: 60px;
-      color: #44ff44;
-      text-shadow: 0 0 10px rgba(68, 255, 68, 0.5);
-      transition: all 0.3s ease;
-      border: 2px solid #44ff44;
-      border-radius: 10px;
-      padding: 15px;
-      background: rgba(68, 255, 68, 0.1);
-    }
-    
-    #result {
-      text-align: center;
-      font-size: 18px;
-      margin: 20px 0;
-      padding: 15px;
-      background: #222;
-      border-radius: 5px;
-      min-height: 40px;
-      border: 2px solid #666;
-    }
-    
-    .welcome-animation {
-      animation: welcomePulse 1.5s infinite;
-    }
-    
-    @keyframes welcomePulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-      100% { transform: scale(1); }
-    }
-    
-    #manual-focus, #debug-info, #test-welcome {
+    #guest-info {
       display: block;
       width: 100%;
       max-width: 300px;
@@ -110,66 +46,27 @@
       cursor: pointer;
       font-size: 16px;
     }
-    
-    #manual-focus:hover, #debug-info:hover, #test-welcome:hover {
-      background: #555;
-    }
-    
-    #test-welcome {
-      background: #006600;
-    }
-    
-    #debug-panel {
+    #info-panel {
       background: #1a1a1a;
       padding: 15px;
       margin: 20px 0;
       border-radius: 5px;
       font-family: monospace;
-      font-size: 12px;
+      font-size: 18px;
       max-height: 200px;
       overflow-y: auto;
     }
-    
-    .error {
-      color: #ff4444;
-    }
-    
-    .success {
-      color: #44ff44;
-    }
-    
-    .warning {
-      color: #ffaa44;
-    }
-    
-    .invalid-qr {
-      color: #ff8800;
-      animation: pulse 1s infinite;
-    }
-    
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.5; }
-      100% { opacity: 1; }
-    }
+    .error { color: #ff4444; }
+    .success { color: #44ff44; }
+    .warning { color: #ffaa44; }
   </style>
 </head>
 <body>
   <div id="scanner-status">Initializing camera...</div>
-  <div id="camera-feed">
-    <video id="video" autoplay playsinline muted></video>
-    <div id="camera-overlay"></div>
-  </div>
-  <div id="welcome-message">Welcome message will appear here</div>
+  <div id="camera-feed"><video id="video" autoplay playsinline muted></video></div>
   <p id="result">Ready to scan QR codes</p>
-  <button id="manual-focus">Toggle Focus Mode</button>
-  <button id="debug-info">Show Debug Info</button>
-  <button id="test-welcome">Test Welcome Message</button>
-  
-  <div id="debug-panel" style="display: none;">
-    <h3>Debug Information:</h3>
-    <div id="debug-log"></div>
-  </div>
+  <button id="guest-info">Show Guest Info</button>
+  <div id="info-panel" style="display: none;"><h3>Guest Information:</h3><div id="info-log"></div></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script type="module">
@@ -190,480 +87,111 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    const videoElement = document.getElementById('video');
-    const welcomeEl = document.getElementById('welcome-message');
-    const resultEl = document.getElementById('result');
     const statusEl = document.getElementById('scanner-status');
-    const focusBtn = document.getElementById('manual-focus');
-    const cameraOverlay = document.getElementById('camera-overlay');
-    const debugBtn = document.getElementById('debug-info');
-    const debugPanel = document.getElementById('debug-panel');
-    const debugLog = document.getElementById('debug-log');
-    const testWelcomeBtn = document.getElementById('test-welcome');
+    const resultEl = document.getElementById('result');
+    const infoBtn = document.getElementById('guest-info');
+    const infoPanel = document.getElementById('info-panel');
+    const infoLog = document.getElementById('info-log');
 
-    let scanner = null;
-    let isFocusMode = false;
-    let isInitializing = false;
-    const Html5QrcodeScannerState = {
-      UNKNOWN: 0,
-      NOT_STARTED: 1,
-      SCANNING: 2,
-      PAUSED: 3
-    };
+    let scanner;
+    let isProcessing = false;
+    let guestInfoMessages = [];
 
-    let debugMessages = [];
-
-    function addDebugMessage(message, type = 'info') {
+    function addGuestInfo(message, type = 'info') {
       const timestamp = new Date().toLocaleTimeString();
-      debugMessages.push(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
-      if (debugMessages.length > 50) debugMessages.shift();
-      
-      console.log(`${type.toUpperCase()}: ${message}`);
-      updateDebugPanel();
+      guestInfoMessages.push(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
+      if (guestInfoMessages.length > 50) guestInfoMessages.shift();
+      updateInfoPanel();
     }
 
-    function updateDebugPanel() {
-      debugLog.innerHTML = debugMessages
+    function updateInfoPanel() {
+      infoLog.innerHTML = guestInfoMessages
         .map(msg => `<div class="${msg.includes('ERROR') ? 'error' : msg.includes('SUCCESS') ? 'success' : msg.includes('WARNING') ? 'warning' : ''}">${msg}</div>`)
         .join('');
-      debugLog.scrollTop = debugLog.scrollHeight;
+      infoLog.scrollTop = infoLog.scrollHeight;
     }
 
-    // Test function to verify welcome message display
-    function testWelcomeMessage() {
-      addDebugMessage('Testing welcome message display');
-      welcomeEl.textContent = '🎉 Test Welcome Message!';
-      welcomeEl.classList.add('welcome-animation');
-      resultEl.textContent = '✅ Test check-in successful';
-      
-      setTimeout(() => {
-        welcomeEl.classList.remove('welcome-animation');
-      }, 3000);
-    }
-
-    // Enhanced welcome message display function
-    function displayWelcomeMessage(guestName, isFirstTime = true) {
-      addDebugMessage(`Displaying welcome message for: ${guestName}`, 'success');
-      
-      if (isFirstTime) {
-        welcomeEl.textContent = `🎉 Welcome, ${guestName}!`;
-        welcomeEl.style.color = '#44ff44';
-        welcomeEl.style.borderColor = '#44ff44';
-        welcomeEl.style.backgroundColor = 'rgba(68, 255, 68, 0.1)';
-      } else {
-        welcomeEl.textContent = `👋 Welcome back, ${guestName}`;
-        welcomeEl.style.color = '#ffaa44';
-        welcomeEl.style.borderColor = '#ffaa44';
-        welcomeEl.style.backgroundColor = 'rgba(255, 170, 68, 0.1)';
-      }
-      
-      welcomeEl.classList.add('welcome-animation');
-      
-      // Clear animation after 3 seconds
-      setTimeout(() => {
-        welcomeEl.classList.remove('welcome-animation');
-      }, 3000);
-      
-      addDebugMessage('Welcome message displayed successfully', 'success');
-    }
-
-    debugBtn.addEventListener('click', () => {
-      debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+    infoBtn.addEventListener('click', () => {
+      infoPanel.style.display = infoPanel.style.display === 'none' ? 'block' : 'none';
     });
 
-    testWelcomeBtn.addEventListener('click', testWelcomeMessage);
+    async function initScanner() {
+      scanner = new Html5Qrcode("camera-feed");
+      const cameras = await Html5Qrcode.getCameras();
+      const cameraId = cameras[0]?.id;
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      addDebugMessage('DOM loaded, starting initialization');
-      
-      if (typeof Html5Qrcode === 'undefined') {
-        addDebugMessage('Html5Qrcode library not loaded!', 'error');
-        statusEl.textContent = 'QR Code library failed to load';
-        return;
-      }
-      
-      addDebugMessage('Html5Qrcode library loaded successfully', 'success');
-      
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        addDebugMessage('Camera API not supported in this browser', 'error');
-        statusEl.textContent = 'Camera not supported';
-        return;
-      }
-      
-      if (!await verifyCameraAccess()) {
-        showCameraError();
-        return;
-      }
+      await scanner.start(
+        cameraId,
+        { fps: 10, qrbox: 250 },
+        onScanSuccess,
+        onScanError
+      );
 
-      await initializeScanner();
-      focusBtn.addEventListener('click', toggleFocusMode);
-    });
+      statusEl.textContent = "Scanner ready - Point at QR code";
+    }
 
-    async function verifyCameraAccess() {
+    async function onScanSuccess(decodedText) {
+      if (isProcessing) return;
+      isProcessing = true;
+
+      addGuestInfo(`QR code detected: ${decodedText}`, 'success');
+      resultEl.textContent = "Processing...";
+
+      await scanner.pause(); // Pause instead of stop
+
       try {
-        addDebugMessage('Requesting camera access...');
-        
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        });
-        
-        addDebugMessage('Camera stream obtained', 'success');
-        
-        videoElement.srcObject = stream;
-        await new Promise((resolve, reject) => {
-          videoElement.onloadedmetadata = () => {
-            addDebugMessage(`Video metadata loaded: ${videoElement.videoWidth}x${videoElement.videoHeight}`, 'success');
-            resolve();
-          };
-          videoElement.onerror = reject;
-          setTimeout(reject, 5000);
-        });
-        
-        stream.getTracks().forEach(track => track.stop());
-        videoElement.srcObject = null;
-        
-        return true;
-      } catch (err) {
-        addDebugMessage(`Camera access verification failed: ${err.message}`, 'error');
-        return false;
-      }
-    }
+        let uniqueId = decodedText.includes("ID:")
+          ? decodedText.match(/ID:\s*(.+)/)?.[1]?.trim().replace(/\s+/g, '_')
+          : decodedText.trim().replace(/\s+/g, '_');
 
-    function showCameraError() {
-      addDebugMessage('Showing camera error UI', 'warning');
-      statusEl.innerHTML = `
-        <p>Camera access denied or unavailable</p>
-        <button id="retry-camera">Retry Camera</button>
-        <p>Try these steps:</p>
-        <ol>
-          <li>Refresh the page</li>
-          <li>Allow camera permissions</li>
-          <li>Ensure no other app is using the camera</li>
-        </ol>
-      `;
-      
-      document.getElementById('retry-camera').addEventListener('click', () => {
-        window.location.reload();
-      });
-    }
-
-    async function initializeScanner() {
-      try {
-        addDebugMessage('Initializing Html5Qrcode scanner...');
-        
-        const scannerElement = document.createElement('div');
-        scannerElement.id = 'qr-reader';
-        scannerElement.style.width = '100%';
-        scannerElement.style.maxWidth = '500px';
-        
-        const cameraFeed = document.getElementById('camera-feed');
-        cameraFeed.innerHTML = '';
-        cameraFeed.appendChild(scannerElement);
-        
-        scanner = new Html5Qrcode("qr-reader");
-        addDebugMessage('Scanner instance created', 'success');
-        
-        const cameras = await Html5Qrcode.getCameras();
-        addDebugMessage(`Found ${cameras.length} cameras`, 'success');
-        
-        cameras.forEach((camera, index) => {
-          addDebugMessage(`Camera ${index}: ${camera.label} (ID: ${camera.id})`);
-        });
-        
-        if (cameras.length === 0) {
-          throw new Error('No cameras detected on this device');
-        }
-        
-        const config = {
-          fps: 10,
-          qrbox: function(viewfinderWidth, viewfinderHeight) {
-            let minEdgePercentage = 0.7;
-            let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-            let qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
-            return {
-              width: qrboxSize,
-              height: qrboxSize
-            };
-          },
-          aspectRatio: 1.0
-        };
-        
-        let cameraId;
-        if (isMobile()) {
-          addDebugMessage('Mobile device detected, looking for rear camera');
-          const rearCamera = cameras.find(cam => 
-            cam.label.toLowerCase().includes('back') ||
-            cam.label.toLowerCase().includes('rear') ||
-            cam.label.toLowerCase().includes('environment')
-          );
-          cameraId = rearCamera ? rearCamera.id : cameras[0].id;
-          addDebugMessage(`Selected camera: ${rearCamera ? 'rear camera' : 'first available'}`);
-        } else {
-          addDebugMessage('Desktop device detected');
-          cameraId = cameras[0].id;
-        }
-        
-        addDebugMessage(`Starting scanner with camera ID: ${cameraId}`);
-        await scanner.start(
-          cameraId,
-          config,
-          onScanSuccess,
-          onScanError
-        );
-        
-        addDebugMessage('Scanner started successfully', 'success');
-        
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        if (scanner.getState() === Html5QrcodeScannerState.SCANNING) {
-          addDebugMessage('Scanner is actively scanning', 'success');
-          statusEl.textContent = 'Scanner ready - Point at QR code';
-          
-          const overlay = document.createElement('div');
-          overlay.id = 'camera-overlay';
-          overlay.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            border: 2px solid #00ff00;
-            border-radius: 10px;
-            pointer-events: none;
-          `;
-          overlay.innerHTML = `<div style="
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 250px;
-            height: 250px;
-            transform: translate(-50%, -50%);
-            border: 2px solid #ff0000;
-            border-radius: 10px;
-          "></div>`;
-          
-          scannerElement.style.position = 'relative';
-          scannerElement.appendChild(overlay);
-          
-          addDebugMessage('Scanner is now ready for use', 'success');
-        } else {
-          throw new Error('Scanner failed to enter scanning state');
-        }
-        
-      } catch (err) {
-        addDebugMessage(`Scanner initialization failed: ${err.message || 'Unknown error'}`, 'error');
-        statusEl.textContent = `Error: ${err.message}`;
-        
-        if (!err.message.includes('fallback')) {
-          addDebugMessage('Trying fallback scanner approach', 'warning');
-          await tryFallbackScanner();
-        }
-      }
-    }
-
-    function isMobile() {
-      const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      addDebugMessage(`Device type: ${mobile ? 'Mobile' : 'Desktop'}`);
-      return mobile;
-    }
-
-    function toggleFocusMode() {
-      isFocusMode = !isFocusMode;
-      focusBtn.textContent = isFocusMode ? 'Exit Focus Mode' : 'Toggle Focus Mode';
-      cameraOverlay.style.backgroundColor = isFocusMode ? 'rgba(0,0,0,0.7)' : 'transparent';
-      addDebugMessage(`Focus mode ${isFocusMode ? 'enabled' : 'disabled'}`);
-    }
-
-    async function tryFallbackScanner() {
-      if (isInitializing) {
-        addDebugMessage('Fallback scanner initialization already in progress, skipping', 'warning');
-        return;
-      }
-      
-      isInitializing = true;
-      
-      try {
-        addDebugMessage('Attempting fallback scanner with facingMode constraint');
-        
-        const scannerElement = document.createElement('div');
-        scannerElement.id = 'qr-reader-fallback';
-        scannerElement.style.width = '100%';
-        scannerElement.style.maxWidth = '500px';
-        
-        const cameraFeed = document.getElementById('camera-feed');
-        cameraFeed.innerHTML = '';
-        cameraFeed.appendChild(scannerElement);
-        
-        if (scanner) {
-          try {
-            await scanner.stop();
-          } catch (e) {
-            addDebugMessage('Error stopping previous scanner (expected)', 'warning');
-          }
-        }
-        
-        scanner = new Html5Qrcode("qr-reader-fallback");
-        
-        await scanner.start(
-          { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: function(viewfinderWidth, viewfinderHeight) {
-              let minEdgePercentage = 0.7;
-              let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-              let qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
-              return {
-                width: qrboxSize,
-                height: qrboxSize
-              };
-            }
-          },
-          onScanSuccess,
-          onScanError
-        );
-        
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        if (scanner.getState() === Html5QrcodeScannerState.SCANNING) {
-          statusEl.textContent = 'Scanner ready (fallback mode)';
-          addDebugMessage('Fallback scanner started successfully', 'success');
-          
-          if (!scannerElement.querySelector('[data-overlay]')) {
-            const overlay = document.createElement('div');
-            overlay.setAttribute('data-overlay', 'true');
-            overlay.style.cssText = `
-              position: absolute;
-              top: 0;
-              left: 0;
-              right: 0;
-              bottom: 0;
-              border: 2px solid #00ff00;
-              border-radius: 10px;
-              pointer-events: none;
-            `;
-            overlay.innerHTML = `<div style="
-              position: absolute;
-              top: 50%;
-              left: 50%;
-              width: 200px;
-              height: 200px;
-              transform: translate(-50%, -50%);
-              border: 2px solid #ff0000;
-              border-radius: 10px;
-            "></div>`;
-            
-            scannerElement.style.position = 'relative';
-            scannerElement.appendChild(overlay);
-          }
-          isInitializing = false;
-        } else {
-          throw new Error('Fallback scanner failed to start');
-        }
-        
-      } catch (fallbackErr) {
-        addDebugMessage(`Fallback scanner failed: ${fallbackErr.message}`, 'error');
-        statusEl.innerHTML = `
-          <div>Camera initialization failed</div>
-          <div>Please try:</div>
-          <ul>
-            <li>Refreshing the page</li>
-            <li>Allowing camera permissions</li>
-            <li>Using HTTPS connection</li>
-            <li>Trying a different browser</li>
-          </ul>
-        `;
-        isInitializing = false;
-      }
-    }
-
-    function onScanSuccess(decodedText) {
-      addDebugMessage(`QR code detected: ${decodedText}`, 'success');
-      statusEl.textContent = 'Processing QR code...';
-      handleScan(decodedText);
-    }
-
-    function onScanError(error) {
-      if (!error.message.includes('No QR code found') &&
-          !error.message.includes('width is 0')) {
-        addDebugMessage(`Scan error: ${error.message}`, 'warning');
-      }
-    }
-
-    async function handleScan(decodedText) {
-      try {
-        addDebugMessage(`Scanned: ${decodedText}`);
-        
-        // Parse QR code format: "Name: Bibi ID: Guest 160"
-        let uniqueId;
-        let guestName = 'Guest';
-        
-        if (decodedText.includes('ID:')) {
-          // Extract the ID part after "ID:"
-          const idMatch = decodedText.match(/ID:\s*(.+)/);
-          if (idMatch) {
-            uniqueId = idMatch[1].trim().replace(/\s+/g, '_'); // "Guest 160" -> "Guest_160"
-          }
-          
-          // Extract the name part after "Name:"
-          const nameMatch = decodedText.match(/Name:\s*([^I]+)/);
-          if (nameMatch) {
-            guestName = nameMatch[1].trim();
-          }
-        } else {
-          // Fallback: treat entire text as ID
-          uniqueId = decodedText.trim().replace(/\s+/g, '_');
-        }
-
-        addDebugMessage(`Extracted Name: ${guestName}, Firebase ID: ${uniqueId}`);
+        let guestName = decodedText.match(/Name:\s*([^I]+)/)?.[1]?.trim() || "Guest";
 
         const guestRef = ref(db, 'guests/' + uniqueId);
         const snapshot = await get(guestRef);
 
         if (!snapshot.exists()) {
-          addDebugMessage(`Guest not found in database for ID: ${uniqueId}`, 'error');
-          resultEl.textContent = "❌ Guest not found in database";
-          welcomeEl.textContent = '';
+          addGuestInfo(`Guest not found: ${uniqueId}`, 'error');
+          resultEl.textContent = "❌ Guest not found";
           return;
         }
 
         const data = snapshot.val();
-        const dbGuestName = data.name || guestName; // Use DB name or fallback to QR name
-
-        addDebugMessage(`Guest found in DB: ${dbGuestName}, has_scanned: ${data.has_scanned}`);
-
         if (data.has_scanned) {
-          addDebugMessage('Guest has already checked in', 'warning');
-          resultEl.textContent = `⚠️ ${dbGuestName} has already checked in`;
-          displayWelcomeMessage(dbGuestName, false); // false = not first time
+          addGuestInfo(`Already scanned: ${guestName}`, 'warning');
+          resultEl.textContent = `⚠️ Already checked in: ${guestName}`;
         } else {
-          addDebugMessage('First time check-in, updating database', 'success');
-          
           await update(guestRef, {
             has_scanned: true,
-            scan_time: new Date().toISOString(),
+            scan_time: new Date().toISOString()
           });
 
           await set(ref(db, `scan_logs/${uniqueId}_${Date.now()}`), {
-            name: dbGuestName,
-            scannedAt: new Date().toISOString(),
+            name: guestName,
+            scannedAt: new Date().toISOString()
           });
 
-          addDebugMessage('Database updated successfully', 'success');
-          resultEl.textContent = `✅ Checked in successfully`;
-          displayWelcomeMessage(dbGuestName, true); // true = first time
+          addGuestInfo(`✅ Checked in: ${guestName}`, 'success');
+          resultEl.textContent = `✅ Welcome ${guestName}`;
         }
       } catch (error) {
-        addDebugMessage(`Scan error: ${error.message}`, 'error');
-        console.error('Scan error:', error);
-        resultEl.textContent = "❌ Error checking in";
-        welcomeEl.textContent = '';
+        addGuestInfo(`Scan error: ${error.message}`, 'error');
+        resultEl.textContent = `❌ Error: ${error.message}`;
+      } finally {
+        setTimeout(async () => {
+          isProcessing = false;
+          resultEl.textContent = "Ready to scan QR codes";
+          await scanner.resume(); // Resume scanner
+        }, 2000);
       }
     }
 
+    function onScanError(err) {
+      if (!err.includes("No QR code found")) {
+        addGuestInfo(`Scan error: ${err}`, 'warning');
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", initScanner);
   </script>
 </body>
 </html>
