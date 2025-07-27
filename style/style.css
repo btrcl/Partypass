@@ -57,6 +57,8 @@ button:hover {
   margin: 20px 0;
   background-color: black;
   border-radius: 10px;
+  aspect-ratio: 1;
+  object-fit: cover;
 }
 
 #result {
@@ -71,18 +73,25 @@ button:hover {
   color: #ffcc00;
 }
 
-#video {
+#scanner-status {
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #333;
+  color: white;
+  border-radius: 4px;
+  text-align: center;
   width: 100%;
   max-width: 400px;
-  background-color: #333; /* Different color to distinguish from black screen */
-  border: 2px solid red; /* Temporary border to verify element size */
-  aspect-ratio: 1/1; /* Ensure square aspect ratio */
 }
 
-#camera-status {
-  padding: 10px;
-  background: #ffcc00;
-  color: #000;
-  margin-bottom: 10px;
-  border-radius: 4px;
+/* Mobile specific styles */
+@media screen and (max-width: 600px) {
+  #video {
+    width: 90vw;
+    height: 90vw;
+  }
+  
+  .login-container {
+    width: 90vw;
+  }
 }
