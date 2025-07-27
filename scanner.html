@@ -393,12 +393,14 @@
         }
         
       } catch (err) {
-        addDebugMessage(`Scanner initialization failed: ${err.message}`, 'error');
+        addDebugMessage(`Scanner initialization failed: ${err.message || 'Unknown error'}`, 'error');
         statusEl.textContent = `Error: ${err.message}`;
         
-        // Try fallback approach
-        addDebugMessage('Trying fallback scanner approach', 'warning');
-        await tryFallbackScanner();
+        // Try fallback approach only if not already trying fallback
+        if (!err.message.includes('fallback')) {
+          addDebugMessage('Trying fallback scanner approach', 'warning');
+          await tryFallbackScanner();
+        }
       }
     }
 
@@ -485,31 +487,34 @@
           statusEl.textContent = 'Scanner ready (fallback mode)';
           addDebugMessage('Fallback scanner started successfully', 'success');
           
-          // Add overlay
-          const overlay = document.createElement('div');
-          overlay.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            border: 2px solid #00ff00;
-            border-radius: 10px;
-            pointer-events: none;
-          `;
-          overlay.innerHTML = `<div style="
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 200px;
-            height: 200px;
-            transform: translate(-50%, -50%);
-            border: 2px solid #ff0000;
-            border-radius: 10px;
-          "></div>`;
-          
-          scannerElement.style.position = 'relative';
-          scannerElement.appendChild(overlay);
+          // Add overlay only once
+          if (!scannerElement.querySelector('[data-overlay]')) {
+            const overlay = document.createElement('div');
+            overlay.setAttribute('data-overlay', 'true');
+            overlay.style.cssText = `
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              border: 2px solid #00ff00;
+              border-radius: 10px;
+              pointer-events: none;
+            `;
+            overlay.innerHTML = `<div style="
+              position: absolute;
+              top: 50%;
+              left: 50%;
+              width: 200px;
+              height: 200px;
+              transform: translate(-50%, -50%);
+              border: 2px solid #ff0000;
+              border-radius: 10px;
+            "></div>`;
+            
+            scannerElement.style.position = 'relative';
+            scannerElement.appendChild(overlay);
+          }
         } else {
           throw new Error('Fallback scanner failed to start');
         }
