@@ -201,37 +201,88 @@ function onScanError(error) {
 async function handleScan(decodedText) {
   try {
     const uniqueId = decodedText.trim();
+    console.log(`[${new Date().toLocaleTimeString()}] INFO: Scanned QR Code: ${uniqueId}`);
+    
+    // Debug: Check if resultEl exists
+    console.log('Result element exists:', !!resultEl);
+    console.log('Result element:', resultEl);
+    
+    // Force update the display immediately
+    if (resultEl) {
+      resultEl.textContent = 'Processing...';
+      resultEl.style.display = 'block';
+      resultEl.style.visibility = 'visible';
+    }
+    
     const guestRef = ref(db, 'guests/' + uniqueId);
     const snapshot = await get(guestRef);
 
     if (!snapshot.exists()) {
-      resultEl.textContent = "Guest not found";
-      statusEl.textContent = 'Ready to scan';
+      console.log('Guest not found for ID:', uniqueId);
+      const message = `Guest not found - ID: ${uniqueId}`;
+      if (resultEl) {
+        resultEl.innerHTML = `<div style="color: red; font-size: 16px; text-align: center; padding: 10px;">${message}</div>`;
+      }
+      // Also try to update status element as backup
+      statusEl.innerHTML = `<span style="color: red;">${message}</span>`;
       return;
     }
 
     const data = snapshot.val();
+    console.log(`[${new Date().toLocaleTimeString()}] INFO: Extracted Name: ${data.name}, Firebase ID: ${uniqueId}`);
+    
+    let displayMessage = '';
     
     if (data.has_scanned) {
-      resultEl.textContent = `Already scanned`;
+      displayMessage = `
+        <div style="color: orange; font-size: 18px; text-align: center; padding: 10px;">
+          <div>Already Scanned!</div>
+          <div style="margin-top: 10px;">Guest: <strong>${data.name}</strong></div>
+          <div style="margin-top: 5px; font-size: 14px;">ID: ${uniqueId}</div>
+        </div>
+      `;
     } else {
       await update(guestRef, { has_scanned: true });
-      resultEl.textContent = `Welcome ${data.name}`;
+      displayMessage = `
+        <div style="color: green; font-size: 20px; text-align: center; padding: 10px;">
+          <div>Welcome ${data.name}! ✅</div>
+          <div style="margin-top: 10px; font-size: 16px;">Guest ID: <strong>${uniqueId}</strong></div>
+          <div style="margin-top: 5px; font-size: 12px; color: #666;">Scanned: ${new Date().toLocaleTimeString()}</div>
+        </div>
+      `;
       
       const logRef = ref(db, `scan_logs/${uniqueId}_${Date.now()}`);
       await set(logRef, {
         name: data.name,
+        uniqueId: uniqueId,
         scannedAt: new Date().toISOString()
       });
     }
+    
+    // Update both result element and status as backup
+    if (resultEl) {
+      resultEl.innerHTML = displayMessage;
+    }
+    statusEl.innerHTML = displayMessage;
+    
+    console.log('Display updated with:', displayMessage);
+    
   } catch (err) {
     console.error("Database Error:", err);
-    resultEl.textContent = "Error processing scan";
+    const errorMessage = `<div style="color: red; text-align: center; padding: 10px;">Error: ${err.message}<br>QR: ${decodedText}</div>`;
+    if (resultEl) {
+      resultEl.innerHTML = errorMessage;
+    }
+    statusEl.innerHTML = errorMessage;
   } finally {
-    statusEl.textContent = 'Ready to scan';
+    // Don't reset status immediately - let the message show
+    setTimeout(() => {
+      statusEl.textContent = 'Ready to scan';
+    }, 3000);
+    
     if (scanner) {
       scanner.stop().then(() => {
-        setTimeout(initializeScanner, 1000);
+        setTimeout(initializeScanner, 2000); // Give more time to see the result
       });
     }
   }

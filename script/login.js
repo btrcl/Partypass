@@ -25,7 +25,7 @@ window.login = function() {
 
   signInWithEmailAndPassword(auth, email, password)
     .then((userCredential) => {
-      window.location.href = "scanner.html";
+      window.location.href = "qr-scanner-fixed.html";
     })
     .catch((error) => {
       errorEl.textContent = "Login failed: " + error.message;
