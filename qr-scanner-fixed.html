@@ -56,17 +56,67 @@
       max-height: 200px;
       overflow-y: auto;
     }
+    
+    #main-log {
+      background: #222;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+      min-height: 150px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .log-entry {
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 3px;
+      border-left: 4px solid #666;
+    }
+    
+    .log-entry.success {
+      background: #1a3d1a;
+      border-left-color: #44ff44;
+      color: #88ff88;
+    }
+    
+    .log-entry.info {
+      background: #1a1a3d;
+      border-left-color: #4488ff;
+      color: #88bbff;
+    }
     .error { color: #ff4444; }
     .success { color: #44ff44; }
     .warning { color: #ffaa44; }
+    
+    #restart-btn {
+      display: none;
+      width: 100%;
+      max-width: 300px;
+      margin: 10px auto;
+      padding: 12px;
+      background: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
   <div id="scanner-status">Initializing camera...</div>
   <div id="camera-feed"><video id="video" autoplay playsinline muted></video></div>
   <p id="result">Ready to scan QR codes</p>
-  <button id="guest-info">Show Guest Info</button>
-  <div id="info-panel" style="display: none;"><h3>Guest Information:</h3><div id="info-log"></div></div>
+  
+  <div id="main-log">
+    <h3 style="margin-top: 0; color: #fff;">Recent Activity</h3>
+    <div id="activity-log">No activity yet...</div>
+  </div>
+  
+  <button id="guest-info">Show Debug Info</button>
+  <button id="restart-btn">Restart Scanner</button>
+  <div id="info-panel" style="display: none;"><h3>Debug Information:</h3><div id="info-log"></div></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script type="module">
@@ -92,10 +142,41 @@
     const infoBtn = document.getElementById('guest-info');
     const infoPanel = document.getElementById('info-panel');
     const infoLog = document.getElementById('info-log');
+    const restartBtn = document.getElementById('restart-btn');
+    const activityLog = document.getElementById('activity-log');
 
     let scanner;
     let isProcessing = false;
     let guestInfoMessages = [];
+    let mainLogMessages = [];
+    let errorCount = 0;
+    let lastErrorTime = 0;
+
+    function addMainLog(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = {
+        timestamp,
+        message,
+        type
+      };
+      
+      mainLogMessages.unshift(logEntry); // Add to beginning
+      if (mainLogMessages.length > 20) mainLogMessages.pop(); // Keep last 20
+      updateMainLog();
+    }
+
+    function updateMainLog() {
+      if (mainLogMessages.length === 0) {
+        activityLog.innerHTML = 'No activity yet...';
+        return;
+      }
+      
+      activityLog.innerHTML = mainLogMessages
+        .map(entry => `<div class="log-entry ${entry.type}">
+          <strong>${entry.timestamp}</strong> - ${entry.message}
+        </div>`)
+        .join('');
+    }
 
     function addGuestInfo(message, type = 'info') {
       const timestamp = new Date().toLocaleTimeString();
@@ -115,78 +196,135 @@
       infoPanel.style.display = infoPanel.style.display === 'none' ? 'block' : 'none';
     });
 
+    restartBtn.addEventListener('click', async () => {
+      try {
+        if (scanner) {
+          await scanner.stop();
+        }
+        restartBtn.style.display = 'none';
+        isProcessing = false;
+        errorCount = 0;
+        await initScanner();
+      } catch (error) {
+        addGuestInfo(`Restart failed: ${error.message}`, 'error');
+      }
+    });
+
     async function initScanner() {
-      scanner = new Html5Qrcode("camera-feed");
-      const cameras = await Html5Qrcode.getCameras();
-      const cameraId = cameras[0]?.id;
+      try {
+        scanner = new Html5Qrcode("camera-feed");
+        const cameras = await Html5Qrcode.getCameras();
+        
+        if (cameras.length === 0) {
+          statusEl.textContent = "No cameras found";
+          addGuestInfo("No cameras available", 'error');
+          return;
+        }
 
-      await scanner.start(
-        cameraId,
-        { fps: 10, qrbox: 250 },
-        onScanSuccess,
-        onScanError
-      );
+        const cameraId = cameras[0]?.id;
 
-      statusEl.textContent = "Scanner ready - Point at QR code";
+        await scanner.start(
+          cameraId,
+          { fps: 10, qrbox: 250 },
+          onScanSuccess,
+          onScanError
+        );
+
+        statusEl.textContent = "Scanner ready - Point at QR code";
+        addMainLog("Scanner ready", 'success');
+        // Don't add debug message to main log
+      } catch (error) {
+        statusEl.textContent = "Failed to initialize scanner";
+        addGuestInfo(`Scanner initialization failed: ${error.message}`, 'error');
+        restartBtn.style.display = 'block';
+      }
     }
 
     async function onScanSuccess(decodedText) {
       if (isProcessing) return;
       isProcessing = true;
 
+      // Only add to debug log, not main log
       addGuestInfo(`QR code detected: ${decodedText}`, 'success');
       resultEl.textContent = "Processing...";
-
-      await scanner.pause(); // Pause instead of stop
+      statusEl.textContent = "Processing scan...";
 
       try {
-        let uniqueId = decodedText.includes("ID:")
-          ? decodedText.match(/ID:\s*(.+)/)?.[1]?.trim().replace(/\s+/g, '_')
-          : decodedText.trim().replace(/\s+/g, '_');
+        // Parse the QR code data
+        let uniqueId, guestName;
+        
+        if (decodedText.includes("Name:") && decodedText.includes("ID:")) {
+          // Format: "Name: John Doe ID: Guest123"
+          const nameMatch = decodedText.match(/Name:\s*([^I]+)/);
+          const idMatch = decodedText.match(/ID:\s*(.+)/);
+          
+          guestName = nameMatch?.[1]?.trim() || "Guest";
+          uniqueId = idMatch?.[1]?.trim().replace(/\s+/g, '_') || decodedText.trim();
+        } else {
+          // Fallback: treat entire text as ID
+          uniqueId = decodedText.trim().replace(/\s+/g, '_');
+          guestName = "Guest";
+        }
 
-        let guestName = decodedText.match(/Name:\s*([^I]+)/)?.[1]?.trim() || "Guest";
+        // Add to main log
+        addMainLog(`Detected: ${guestName} (ID: ${uniqueId})`, 'success');
+        addGuestInfo(`Processing guest: ${guestName} (ID: ${uniqueId})`, 'info');
 
         const guestRef = ref(db, 'guests/' + uniqueId);
         const snapshot = await get(guestRef);
 
         if (!snapshot.exists()) {
-          addGuestInfo(`Guest not found: ${uniqueId}`, 'error');
+          addMainLog(`❌ ${guestName} (ID: ${uniqueId}) - Not found in system`, 'error');
+          addGuestInfo(`Guest not found in database: ${uniqueId}`, 'error');
           resultEl.textContent = "❌ Guest not found";
-          return;
-        }
-
-        const data = snapshot.val();
-        if (data.has_scanned) {
-          addGuestInfo(`Already scanned: ${guestName}`, 'warning');
-          resultEl.textContent = `⚠️ Already checked in: ${guestName}`;
+          statusEl.textContent = "Guest not found";
         } else {
-          await update(guestRef, {
-            has_scanned: true,
-            scan_time: new Date().toISOString()
-          });
+          const data = snapshot.val();
+          if (data.has_scanned) {
+            addMainLog(`⚠️ ${guestName} (ID: ${uniqueId}) - Already checked in`, 'info');
+            addGuestInfo(`Already checked in: ${guestName}`, 'warning');
+            resultEl.textContent = `⚠️ Already checked in: ${guestName}`;
+            statusEl.textContent = "Already checked in";
+          } else {
+            await update(guestRef, {
+              has_scanned: true,
+              scan_time: new Date().toISOString()
+            });
 
-          await set(ref(db, `scan_logs/${uniqueId}_${Date.now()}`), {
-            name: guestName,
-            scannedAt: new Date().toISOString()
-          });
+            await set(ref(db, `scan_logs/${uniqueId}_${Date.now()}`), {
+              name: guestName,
+              uniqueId: uniqueId,
+              scannedAt: new Date().toISOString()
+            });
 
-          addGuestInfo(`✅ Checked in: ${guestName}`, 'success');
-          resultEl.textContent = `✅ Welcome ${guestName}`;
+            addMainLog(`✅ ${guestName} (ID: ${uniqueId}) - Welcome! Checked in successfully`, 'success');
+            addGuestInfo(`✅ Successfully checked in: ${guestName}`, 'success');
+            resultEl.textContent = `✅ Welcome ${guestName}`;
+            statusEl.textContent = "Check-in successful";
+          }
         }
       } catch (error) {
-        addGuestInfo(`Scan error: ${error.message}`, 'error');
+        addMainLog(`❌ Error processing scan: ${error.message}`, 'error');
+        addGuestInfo(`Processing error: ${error.message}`, 'error');
         resultEl.textContent = `❌ Error: ${error.message}`;
-      } finally {
-        setTimeout(async () => {
-          isProcessing = false;
-          resultEl.textContent = "Ready to scan QR codes";
-          await scanner.resume(); // Resume scanner
-        }, 2000);
+        statusEl.textContent = "Processing failed";
       }
+
+      // Reset after 2 seconds and continue scanning
+      setTimeout(() => {
+        isProcessing = false;
+        resultEl.textContent = "Ready to scan next QR code";
+        statusEl.textContent = "Scanner ready - Point at QR code";
+      }, 2000);
     }
 
     function onScanError(err) {
-      if (!err.includes("No QR code found")) {
+      // Completely ignore parse errors and "No QR code found" messages
+      // Only log actual serious errors
+      if (!err.includes("No MultiFormat Readers") && 
+          !err.includes("parse error") && 
+          !err.includes("No QR code found") &&
+          !err.includes("NotFoundException")) {
         addGuestInfo(`Scan error: ${err}`, 'warning');
       }
     }
