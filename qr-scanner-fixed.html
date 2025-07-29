@@ -33,7 +33,7 @@
       height: auto;
       border-radius: 10px;
     }
-    #guest-info {
+    .button {
       display: block;
       width: 100%;
       max-width: 300px;
@@ -45,6 +45,21 @@
       border-radius: 5px;
       cursor: pointer;
       font-size: 16px;
+      text-align: center;
+    }
+    #camera-selector {
+      background: #555;
+      margin-bottom: 20px;
+    }
+    #switch-camera {
+      background: #0066cc;
+    }
+    #guest-info {
+      background: #444;
+    }
+    #restart-btn {
+      display: none;
+      background: #ff4444;
     }
     #info-panel {
       background: #1a1a1a;
@@ -89,23 +104,25 @@
     .success { color: #44ff44; }
     .warning { color: #ffaa44; }
     
-    #restart-btn {
-      display: none;
-      width: 100%;
-      max-width: 300px;
-      margin: 10px auto;
-      padding: 12px;
-      background: #ff4444;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 16px;
+    .camera-info {
+      font-size: 14px;
+      color: #aaa;
+      text-align: center;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
   <div id="scanner-status">Initializing camera...</div>
+  
+  <select id="camera-selector" class="button" style="display: none;">
+    <option value="">Select Camera...</option>
+  </select>
+  
+  <button id="switch-camera" class="button" style="display: none;">📷 Switch Camera</button>
+  
+  <div class="camera-info" id="camera-info" style="display: none;"></div>
+  
   <div id="camera-feed"><video id="video" autoplay playsinline muted></video></div>
   <p id="result">Ready to scan QR codes</p>
   
@@ -114,8 +131,8 @@
     <div id="activity-log">No activity yet...</div>
   </div>
   
-  <button id="guest-info">Show Debug Info</button>
-  <button id="restart-btn">Restart Scanner</button>
+  <button id="guest-info" class="button">Show Debug Info</button>
+  <button id="restart-btn" class="button">Restart Scanner</button>
   <div id="info-panel" style="display: none;"><h3>Debug Information:</h3><div id="info-log"></div></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -144,6 +161,9 @@
     const infoLog = document.getElementById('info-log');
     const restartBtn = document.getElementById('restart-btn');
     const activityLog = document.getElementById('activity-log');
+    const cameraSelector = document.getElementById('camera-selector');
+    const switchCameraBtn = document.getElementById('switch-camera');
+    const cameraInfo = document.getElementById('camera-info');
 
     let scanner;
     let isProcessing = false;
@@ -151,6 +171,11 @@
     let mainLogMessages = [];
     let errorCount = 0;
     let lastErrorTime = 0;
+    let lastScannedCode = '';
+    let lastScannedTime = 0;
+    let availableCameras = [];
+    let currentCameraIndex = 0;
+    let currentCameraId = null;
 
     function addMainLog(message, type = 'info') {
       const timestamp = new Date().toLocaleTimeString();
@@ -160,8 +185,8 @@
         type
       };
       
-      mainLogMessages.unshift(logEntry); // Add to beginning
-      if (mainLogMessages.length > 20) mainLogMessages.pop(); // Keep last 20
+      mainLogMessages.unshift(logEntry);
+      if (mainLogMessages.length > 20) mainLogMessages.pop();
       updateMainLog();
     }
 
@@ -192,36 +217,79 @@
       infoLog.scrollTop = infoLog.scrollHeight;
     }
 
-    infoBtn.addEventListener('click', () => {
-      infoPanel.style.display = infoPanel.style.display === 'none' ? 'block' : 'none';
-    });
+    function updateCameraInfo() {
+      if (availableCameras.length > 0 && currentCameraId) {
+        const currentCamera = availableCameras.find(cam => cam.id === currentCameraId);
+        if (currentCamera) {
+          const cameraType = currentCamera.label.toLowerCase().includes('back') || currentCamera.label.toLowerCase().includes('rear') ? 
+                             '📱 Back Camera' : '🤳 Front Camera';
+          cameraInfo.textContent = `${cameraType} - ${currentCamera.label}`;
+          cameraInfo.style.display = 'block';
+        }
+      }
+    }
 
-    restartBtn.addEventListener('click', async () => {
+    async function loadCameras() {
+      try {
+        availableCameras = await Html5Qrcode.getCameras();
+        
+        if (availableCameras.length === 0) {
+          statusEl.textContent = "No cameras found";
+          addGuestInfo("No cameras available", 'error');
+          return false;
+        }
+
+        // Clear and populate camera selector
+        cameraSelector.innerHTML = '<option value="">Select Camera...</option>';
+        availableCameras.forEach((camera, index) => {
+          const option = document.createElement('option');
+          option.value = camera.id;
+          const cameraType = camera.label.toLowerCase().includes('back') || camera.label.toLowerCase().includes('rear') ? 
+                            '📱 Back' : '🤳 Front';
+          option.textContent = `${cameraType} - ${camera.label}`;
+          cameraSelector.appendChild(option);
+        });
+
+        // Show camera controls if multiple cameras
+        if (availableCameras.length > 1) {
+          cameraSelector.style.display = 'block';
+          switchCameraBtn.style.display = 'block';
+        }
+
+        // Try to use back camera first (better for QR scanning)
+        const backCamera = availableCameras.find(camera => 
+          camera.label.toLowerCase().includes('back') || 
+          camera.label.toLowerCase().includes('rear') ||
+          camera.label.toLowerCase().includes('environment')
+        );
+        
+        if (backCamera) {
+          currentCameraId = backCamera.id;
+          currentCameraIndex = availableCameras.findIndex(cam => cam.id === backCamera.id);
+          addGuestInfo(`Selected back camera: ${backCamera.label}`, 'info');
+        } else {
+          // Fallback to first available camera
+          currentCameraId = availableCameras[0].id;
+          currentCameraIndex = 0;
+          addGuestInfo(`Using first available camera: ${availableCameras[0].label}`, 'info');
+        }
+
+        cameraSelector.value = currentCameraId;
+        updateCameraInfo();
+        return true;
+      } catch (error) {
+        addGuestInfo(`Failed to load cameras: ${error.message}`, 'error');
+        return false;
+      }
+    }
+
+    async function startScanner(cameraId) {
       try {
         if (scanner) {
           await scanner.stop();
         }
-        restartBtn.style.display = 'none';
-        isProcessing = false;
-        errorCount = 0;
-        await initScanner();
-      } catch (error) {
-        addGuestInfo(`Restart failed: ${error.message}`, 'error');
-      }
-    });
 
-    async function initScanner() {
-      try {
         scanner = new Html5Qrcode("camera-feed");
-        const cameras = await Html5Qrcode.getCameras();
-        
-        if (cameras.length === 0) {
-          statusEl.textContent = "No cameras found";
-          addGuestInfo("No cameras available", 'error');
-          return;
-        }
-
-        const cameraId = cameras[0]?.id;
 
         await scanner.start(
           cameraId,
@@ -232,7 +300,82 @@
 
         statusEl.textContent = "Scanner ready - Point at QR code";
         addMainLog("Scanner ready", 'success');
-        // Don't add debug message to main log
+        updateCameraInfo();
+        
+      } catch (error) {
+        statusEl.textContent = "Failed to start scanner";
+        addGuestInfo(`Scanner start failed: ${error.message}`, 'error');
+        throw error;
+      }
+    }
+
+    async function switchCamera() {
+      if (availableCameras.length <= 1) return;
+
+      try {
+        currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+        currentCameraId = availableCameras[currentCameraIndex].id;
+        cameraSelector.value = currentCameraId;
+        
+        statusEl.textContent = "Switching camera...";
+        await startScanner(currentCameraId);
+        
+        const cameraType = availableCameras[currentCameraIndex].label.toLowerCase().includes('back') ? 'back' : 'front';
+        addMainLog(`Switched to ${cameraType} camera`, 'info');
+        
+      } catch (error) {
+        addGuestInfo(`Camera switch failed: ${error.message}`, 'error');
+        restartBtn.style.display = 'block';
+      }
+    }
+
+    // Event listeners
+    infoBtn.addEventListener('click', () => {
+      infoPanel.style.display = infoPanel.style.display === 'none' ? 'block' : 'none';
+    });
+
+    switchCameraBtn.addEventListener('click', switchCamera);
+
+    cameraSelector.addEventListener('change', async (e) => {
+      if (e.target.value) {
+        currentCameraId = e.target.value;
+        currentCameraIndex = availableCameras.findIndex(cam => cam.id === currentCameraId);
+        try {
+          statusEl.textContent = "Switching camera...";
+          await startScanner(currentCameraId);
+        } catch (error) {
+          addGuestInfo(`Manual camera switch failed: ${error.message}`, 'error');
+          restartBtn.style.display = 'block';
+        }
+      }
+    });
+
+    restartBtn.addEventListener('click', async () => {
+      try {
+        if (scanner) {
+          await scanner.stop();
+        }
+        restartBtn.style.display = 'none';
+        isProcessing = false;
+        errorCount = 0;
+        lastScannedCode = '';
+        lastScannedTime = 0;
+        await initScanner();
+      } catch (error) {
+        addGuestInfo(`Restart failed: ${error.message}`, 'error');
+      }
+    });
+
+    async function initScanner() {
+      try {
+        const camerasLoaded = await loadCameras();
+        if (!camerasLoaded) {
+          restartBtn.style.display = 'block';
+          return;
+        }
+
+        await startScanner(currentCameraId);
+
       } catch (error) {
         statusEl.textContent = "Failed to initialize scanner";
         addGuestInfo(`Scanner initialization failed: ${error.message}`, 'error');
@@ -241,34 +384,36 @@
     }
 
     async function onScanSuccess(decodedText) {
-      if (isProcessing) return;
-      isProcessing = true;
+      const currentTime = Date.now();
+      
+      if (decodedText === lastScannedCode && (currentTime - lastScannedTime) < 3000) {
+        return;
+      }
+      
+      lastScannedCode = decodedText;
+      lastScannedTime = currentTime;
 
-      // Only add to debug log, not main log
       addGuestInfo(`QR code detected: ${decodedText}`, 'success');
-      resultEl.textContent = "Processing...";
-      statusEl.textContent = "Processing scan...";
 
       try {
-        // Parse the QR code data
         let uniqueId, guestName;
         
         if (decodedText.includes("Name:") && decodedText.includes("ID:")) {
-          // Format: "Name: John Doe ID: Guest123"
           const nameMatch = decodedText.match(/Name:\s*([^I]+)/);
           const idMatch = decodedText.match(/ID:\s*(.+)/);
           
           guestName = nameMatch?.[1]?.trim() || "Guest";
           uniqueId = idMatch?.[1]?.trim().replace(/\s+/g, '_') || decodedText.trim();
         } else {
-          // Fallback: treat entire text as ID
           uniqueId = decodedText.trim().replace(/\s+/g, '_');
           guestName = "Guest";
         }
 
-        // Add to main log
         addMainLog(`Detected: ${guestName} (ID: ${uniqueId})`, 'success');
         addGuestInfo(`Processing guest: ${guestName} (ID: ${uniqueId})`, 'info');
+
+        resultEl.textContent = "Processing...";
+        statusEl.textContent = "Processing scan...";
 
         const guestRef = ref(db, 'guests/' + uniqueId);
         const snapshot = await get(guestRef);
@@ -303,24 +448,26 @@
             statusEl.textContent = "Check-in successful";
           }
         }
+
+        setTimeout(() => {
+          resultEl.textContent = "Ready to scan next QR code";
+          statusEl.textContent = "Scanner ready - Point at QR code";
+        }, 2000);
+
       } catch (error) {
         addMainLog(`❌ Error processing scan: ${error.message}`, 'error');
         addGuestInfo(`Processing error: ${error.message}`, 'error');
         resultEl.textContent = `❌ Error: ${error.message}`;
         statusEl.textContent = "Processing failed";
+        
+        setTimeout(() => {
+          resultEl.textContent = "Ready to scan next QR code";
+          statusEl.textContent = "Scanner ready - Point at QR code";
+        }, 2000);
       }
-
-      // Reset after 2 seconds and continue scanning
-      setTimeout(() => {
-        isProcessing = false;
-        resultEl.textContent = "Ready to scan next QR code";
-        statusEl.textContent = "Scanner ready - Point at QR code";
-      }, 2000);
     }
 
     function onScanError(err) {
-      // Completely ignore parse errors and "No QR code found" messages
-      // Only log actual serious errors
       if (!err.includes("No MultiFormat Readers") && 
           !err.includes("parse error") && 
           !err.includes("No QR code found") &&
